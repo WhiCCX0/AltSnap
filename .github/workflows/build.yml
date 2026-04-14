@@ -23,22 +23,18 @@ jobs:
       with:
         arch: x64
 
-    - name: Build with MSVC (Master Optimization)
+    - name: Build with MSVC (Corrected Ultimate)
       shell: cmd
       run: |
-        :: 1. 防御性跳转，确保处于正确的源码根目录
         cd /d %GITHUB_WORKSPACE%
 
-        :: 2. 注入大师优化方案的编译参数
-        :: 使用 ^ 符号进行优雅的换行
-        :: /FS 强制同步写入 PDB，防止并发写入导致文件锁定报错
-        set CL=/O2 /GL /Gw /arch:AVX2 /favor:INTEL64 /GS- /MT /FS ^
-        /D WIN32_LEAN_AND_MEAN /D NOMINMAX /D _WIN32_WINNT=0x0A00 %CL%
+        :: 剔除了导致编译失败的 /MT 和三个 /D 宏定义
+        :: 保留最高效的 CPU 压榨参数：最高速度、LTO 预备、全局数据隔离、AVX2 特化、去除安全检查、强制同步 PDB
+        set CL=/O2 /GL /Gw /arch:AVX2 /favor:INTEL64 /GS- /FS %CL%
 
-        :: 3. 注入链接参数
+        :: 保留大师推荐的激进链接期合并参数
         set LINK=/LTCG /OPT:REF /OPT:ICF=10 %LINK%
 
-        :: 4. 调用原生编译批处理
         call mkmsvc.bat
 
     - name: Upload Artifact
