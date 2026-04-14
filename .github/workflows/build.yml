@@ -23,24 +23,28 @@ jobs:
       with:
         arch: x64
 
-    - name: Build with MSVC (14900K Optimized)
+    - name: Build with MSVC (Master Optimization)
       shell: cmd
       run: |
-        :: 【新增】/MP 开启多核并行编译，榨干 GitHub 容器 CPU，显著缩短编译等待时间
-        :: 宏定义：精简系统调用、强制 Win10/11 API
-        :: 性能极限：最高速度 /O2、LTO前期 /GL、全数据隔离 /Gw、14900K特化 /arch:AVX2 /favor:INTEL64、去安全检查 /GS-、静态链接 /MT
-        set CL=/MP /O2 /GL /Gw /arch:AVX2 /favor:INTEL64 /GS- /MT /D WIN32_LEAN_AND_MEAN /D NOMINMAX /D _WIN32_WINNT=0x0A00 %CL%
-        
-        :: 链接器：LTO最终合成 /LTCG、死代码消除 /OPT:REF、高强度相同函数折叠 /OPT:ICF=10
+        :: 1. 防御性跳转，确保处于正确的源码根目录
+        cd /d %GITHUB_WORKSPACE%
+
+        :: 2. 注入大师优化方案的编译参数
+        :: 使用 ^ 符号进行优雅的换行
+        :: /FS 强制同步写入 PDB，防止并发写入导致文件锁定报错
+        set CL=/O2 /GL /Gw /arch:AVX2 /favor:INTEL64 /GS- /MT /FS ^
+        /D WIN32_LEAN_AND_MEAN /D NOMINMAX /D _WIN32_WINNT=0x0A00 %CL%
+
+        :: 3. 注入链接参数
         set LINK=/LTCG /OPT:REF /OPT:ICF=10 %LINK%
-        
-        :: 执行编译脚本
+
+        :: 4. 调用原生编译批处理
         call mkmsvc.bat
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: AltSnap-14900K-Release
+        name: AltSnap-14900K-Master-Release
         path: |
           *.exe
           *.dll
