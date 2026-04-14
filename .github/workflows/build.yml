@@ -1,0 +1,37 @@
+name: Build AltSnap (14900K Optimized)
+
+on: 
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-extreme-perf:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup MSYS2 (UCRT64)
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          make
+          mingw-w64-ucrt-x86_64-gcc
+
+    - name: Build AltSnap (14900K Release)
+      shell: msys2 {0}
+      run: |
+        make -fMakefileX64 CFLAGS="-O3 -march=alderlake -mtune=alderlake -flto -DNDEBUG" LDFLAGS="-s -flto -mwindows"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AltSnap-14900K-Release
+        path: |
+          *.exe
+          *.dll
+          *.ini
