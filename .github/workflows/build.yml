@@ -23,31 +23,37 @@ jobs:
       with:
         msystem: UCRT64
         update: true
-        # 此处新增了 git，确保隔离环境内可以正常调用 Git 指令
         install: >-
           make
           mingw-w64-ucrt-x86_64-gcc
           git
 
-    - name: Build AltSnap (14900K Release)
-      shell: msys2 {0}
+    - name: Prepare Files and Fix Encodings
+      shell: bash
       run: |
-        # 1. 修复 Git 底层 Bug，防止 make 崩溃
-        sed -i 's/utf-16le-bom/UTF-16LE/gI' .gitattributes
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
-        git commit -am "Bypass UTF-16LE-BOM gitattributes bug" || true
+        # 1. 彻底覆盖并屏蔽 Git 的底层编码转换机制
+        # 强制 Git 忽略项目 .gitattributes 中的 utf-16le-bom 灾难性规则
+        echo "* -working-tree-encoding" > .git/info/attributes
         
-        # 2. 手动完成语言文件转码
-        for f in Lang/*.ini AltSnap.dni; do
+        # 2. 刷新索引并强制重置工作区
+        # 这会将所有的 .rc 和 .c 源码文件还原为原生的 UTF-8 字节状态
+        # 完美解决 GNU windres 无法解析 UTF-16 导致 Syntax Error 的致命问题
+        git rm --cached -r . >/dev/null 2>&1
+        git reset --hard HEAD >/dev/null 2>&1
+        
+        # 3. 手动转换语言和配置文件
+        # 程序在 Windows 运行时依然需要配置文件带有 BOM 头，因此定向精准转换
+        for f in Lang/*.ini *.dni; do
           if [ -f "$f" ]; then
             printf '\xFF\xFE' > "${f}.utf16"
             iconv -f UTF-8 -t UTF-16LE "$f" >> "${f}.utf16" 2>/dev/null || true
             mv "${f}.utf16" "$f"
           fi
         done
-        
-        # 3. 执行极限性能编译
+
+    - name: Build AltSnap (14900K Release)
+      shell: msys2 {0}
+      run: |
         make -fMakefileX64 CFLAGS="-O3 -march=alderlake -mtune=alderlake -flto -DNDEBUG" LDFLAGS="-s -flto -mwindows"
 
     - name: Upload Artifact
