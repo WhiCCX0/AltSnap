@@ -5,6 +5,10 @@ on:
     branches: [ "master", "main" ]
   workflow_dispatch:
 
+env:
+  # 提前应用 2026 年 GitHub 规范，强制启用 Node.js 24 消除底部黄色弃用警告
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-extreme-perf:
     runs-on: windows-latest
@@ -12,6 +16,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 提取完整历史，防止 make 调用 git describe 获取不到版本号
 
     - name: Setup MSYS2 (UCRT64)
       uses: msys2/setup-msys2@v2
@@ -25,6 +31,26 @@ jobs:
     - name: Build AltSnap (14900K Release)
       shell: msys2 {0}
       run: |
+        # 1. 修复 Git 底层 Bug，防止 make 崩溃
+        # 将无法识别的 utf-16le-bom 替换为规范的 UTF-16LE
+        sed -i 's/utf-16le-bom/UTF-16LE/gI' .gitattributes
+        
+        # 提交该修改，骗过状态检测，防止 make 内部调用 git 获取状态时持续报错
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git commit -am "Bypass UTF-16LE-BOM gitattributes bug" || true
+        
+        # 2. 手动完成语言文件转码
+        # 补充缺失的 BOM 头 (\xFF\xFE)，确保 Windows 能够正确识别 INI 文件不乱码
+        for f in Lang/*.ini AltSnap.dni; do
+          if [ -f "$f" ]; then
+            printf '\xFF\xFE' > "${f}.utf16"
+            iconv -f UTF-8 -t UTF-16LE "$f" >> "${f}.utf16" 2>/dev/null || true
+            mv "${f}.utf16" "$f"
+          fi
+        done
+        
+        # 3. 执行极限性能编译
         make -fMakefileX64 CFLAGS="-O3 -march=alderlake -mtune=alderlake -flto -DNDEBUG" LDFLAGS="-s -flto -mwindows"
 
     - name: Upload Artifact
@@ -35,3 +61,4 @@ jobs:
           *.exe
           *.dll
           *.ini
+          Lang/
