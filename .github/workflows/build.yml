@@ -1,4 +1,4 @@
-name: Build AltSnap (14900K Optimized)
+name: Build AltSnap (14900K Clang)
 
 on: 
   push:
@@ -18,25 +18,27 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup MSYS2 (UCRT64)
+    - name: Setup MSYS2 (CLANG64)
       uses: msys2/setup-msys2@v2
       with:
-        msystem: UCRT64
+        msystem: CLANG64
         update: true
+        # 抛弃 gcc，直接安装 clang 和 lld 现代编译链
         install: >-
           make
-          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-clang-x86_64-clang
+          mingw-w64-clang-x86_64-lld
           git
 
     - name: Prepare Files and Fix Encodings
       shell: bash
       run: |
-        # 1. 彻底覆盖并屏蔽 Git 的底层编码转换机制
+        # 物理隔绝 Git 的错误转换
         echo "* -working-tree-encoding" > .git/info/attributes
         git rm --cached -r . >/dev/null 2>&1
         git reset --hard HEAD >/dev/null 2>&1
         
-        # 2. 手动转换语言和配置文件
+        # 仅对运行时所需的 INI 文件转码
         for f in Lang/*.ini *.dni; do
           if [ -f "$f" ]; then
             printf '\xFF\xFE' > "${f}.utf16"
@@ -48,8 +50,8 @@ jobs:
     - name: Build AltSnap (14900K Release)
       shell: msys2 {0}
       run: |
-        # 增加 WR="windres --use-temp-file" 参数，完美绕过 MSYS2 环境下管道崩溃的 Bug
-        make -fMakefileX64 WR="windres --use-temp-file" CFLAGS="-O3 -march=alderlake -mtune=alderlake -flto -DNDEBUG" LDFLAGS="-s -flto -mwindows"
+        # 强制接管 CC 和 WR 参数，使用 clang 和 llvm-windres 编译
+        make -fMakefileX64 CC=clang CXX=clang++ WR=llvm-windres CFLAGS="-O3 -march=alderlake -flto=thin -DNDEBUG" LDFLAGS="-s -flto=thin -fuse-ld=lld -mwindows"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
