@@ -1,4 +1,4 @@
-name: Build AltSnap (14900K Native MSVC)
+name: Build AltSnap (14900K Ultimate MSVC)
 
 on: 
   push:
@@ -19,7 +19,6 @@ jobs:
         fetch-depth: 0
 
     - name: Setup MSVC Toolchain
-      # 直接调用 GitHub 官方预装的 Visual Studio 2022 编译环境 (完美替代 MSYS2)
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
@@ -27,26 +26,23 @@ jobs:
     - name: Build with MSVC (14900K Optimized)
       shell: cmd
       run: |
-        :: 1. 通过系统环境变量，暴力注入微软官方的极客优化指令
-        :: /O2 = 最大化执行速度
-        :: /GL = 全程序跨文件深度优化 (LTO的微软等效版)
-        :: /arch:AVX2 = 直接调用 14900K 支持的 AVX2 高级矢量扩展指令集，性能飙升
-        :: /favor:INTEL64 = 专门针对 Intel 处理器微架构优化内存调度
-        set CL=/O2 /GL /arch:AVX2 /favor:INTEL64 %CL%
-        set LINK=/LTCG /OPT:REF /OPT:ICF %LINK%
+        :: 【新增】/MP 开启多核并行编译，榨干 GitHub 容器 CPU，显著缩短编译等待时间
+        :: 宏定义：精简系统调用、强制 Win10/11 API
+        :: 性能极限：最高速度 /O2、LTO前期 /GL、全数据隔离 /Gw、14900K特化 /arch:AVX2 /favor:INTEL64、去安全检查 /GS-、静态链接 /MT
+        set CL=/MP /O2 /GL /Gw /arch:AVX2 /favor:INTEL64 /GS- /MT /D WIN32_LEAN_AND_MEAN /D NOMINMAX /D _WIN32_WINNT=0x0A00 %CL%
         
-        :: 2. 直接运行原作者提供的原生 MSVC 编译脚本
-        :: 彻底告别 makefile 和 windres 的乱码崩溃噩梦
+        :: 链接器：LTO最终合成 /LTCG、死代码消除 /OPT:REF、高强度相同函数折叠 /OPT:ICF=10
+        set LINK=/LTCG /OPT:REF /OPT:ICF=10 %LINK%
+        
+        :: 执行编译脚本
         call mkmsvc.bat
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: AltSnap-14900K-MSVC-Release
+        name: AltSnap-14900K-Release
         path: |
           *.exe
           *.dll
           *.ini
           Lang/
-          x64/
-          Release/
