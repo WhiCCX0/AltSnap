@@ -4880,6 +4880,7 @@ static HWND FindTiledWindow(HWND hwnd, unsigned char direction)
 
 /////////////////////////////////////////////////////////////////////////////
 // Single click commands
+#include "align.c"
 static void SClickActions(HWND hwnd, action_t action)
 {
     static const resizexy_t rxy_map[] = {
@@ -4948,6 +4949,16 @@ static void SClickActions(HWND hwnd, action_t action)
         if(action.fl < ARR_SZ(conf.inputSequences) && conf.inputSequences[action.fl] ) {
             SendInputSequence(conf.inputSequences[action.fl]);
         }
+        break;
+    // New actions: Align is done inside the DLL, the others are forwarded to the EXE.
+    case AC_ALIGN:       ActionAlign(hwnd, action.fl); break;
+    case AC_WINDOWDETAILS:
+    case AC_DIMMERFIXED:
+    case AC_DIMMERFOLLOW:
+    case AC_SCREENSHOT:
+    case AC_REVEALEXE:
+    case AC_CLIPBOARD:
+        PostMessage(g_mainhwnd, WM_ACTIONFWD, (WPARAM)hwnd, PACK_ACTION(action));
         break;
     }
 }
@@ -6034,7 +6045,8 @@ LRESULT CALLBACK MenuWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         } else if (HIWORD(wParam) && IsWindow(state.sclickhwnd) ) {
             // ACTION MENU LOWORD(wParam) has to be zero to differenctiae with unikey menu
             LOG("Action Menu WM_COMMAND, wp=%X, lp=%X", (UINT)wParam, (UINT)lParam);
-            action_t action = { HIWORD(wParam), 0, 0 }; // TOTO: FIXME!!!!!!!
+            action_t action = { LOBYTE(HIWORD(wParam)), HIBYTE(HIWORD(wParam)), 0 };
+            LOG("Action Menu id=%X -> ac=%d fl=%d", (UINT)wParam, (int)action.ac, (int)action.fl);
             if (action.ac) {
                 state.prevpt = state.clickpt;
                 if(action.ac == AC_ORICLICK) {
@@ -6048,7 +6060,9 @@ LRESULT CALLBACK MenuWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 // We should not refocus windows if those
                 // actions were performed...
                 if (action.ac == AC_LOWER || action.ac == AC_MINIMIZE
-                ||  action.ac == AC_KILL || action.ac == AC_CLOSE)
+                ||  action.ac == AC_KILL || action.ac == AC_CLOSE
+                ||  action.ac == AC_WINDOWDETAILS || action.ac == AC_SCREENSHOT
+                ||  action.ac == AC_REVEALEXE)
                     fhwndori = NULL;
             }
             // Menu closes now.
@@ -6181,7 +6195,8 @@ LRESULT CALLBACK HooksWinPorc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if (action.ac > AC_RESIZE) { // Exclude resize action in case...
             POINT pt;
             GetMsgPT(&pt);
-            static const enum action noinitactions[] = { AC_KILL, AC_PAUSE, AC_RESUME, AC_ASONOFF, AC_NONE };
+            static const enum action noinitactions[] = { AC_KILL, AC_PAUSE, AC_RESUME, AC_ASONOFF
+                , AC_WINDOWDETAILS, AC_SCREENSHOT, AC_REVEALEXE, AC_CLIPBOARD, AC_NONE };
             if (IsActionInList((enum action)action.ac, noinitactions)) {
                 // Some actions pass directly through the default blacklists...
                 HWND targethwnd = ptwindow? WindowFromPoint(pt): GetForegroundWindow();

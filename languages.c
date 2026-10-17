@@ -95,7 +95,10 @@ static void LoadTranslationOrTT(const TCHAR *__restrict__ ini, const TCHAR * __r
     if(!l10n_ini) { l10n_ini = (struct strings *)calloc(1, sizeof(struct strings)); }
     if(!l10n_ini) return; // Unable to allocate mem
 
-    sv_t ini_map[ARR_SZ(l10n_inimapping)];
+    // Map table on the heap: struct strings is now far above the 4 KB stack
+    // budget of ABI-3 (mapping entries are two pointers each).
+    sv_t *ini_map = (sv_t *)calloc(ARR_SZ(l10n_inimapping), sizeof(*ini_map));
+    if(!ini_map) { free(tsection); return; }
     RGIniMapSection(tsection, ini_map, l10n_inimapping, ARR_SZ(l10n_inimapping));
 
     for (size_t i=0; i < ARR_SZ(l10n_inimapping); i++) {
@@ -115,6 +118,7 @@ static void LoadTranslationOrTT(const TCHAR *__restrict__ ini, const TCHAR * __r
     }
     l10n = l10n_ini;
     free(tsection); // free the cached Translation section.
+    free(ini_map);
     //LOGA("LoadTranslationOrTT in %u us", (unsigned)RGTac(&tt));
 }
 

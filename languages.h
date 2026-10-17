@@ -148,6 +148,38 @@ struct langinfoitem {
   LNGVALUE(InputActionCenter2,      TEXT("Center on &physical monitor"), NULL) \
   LNGVALUE(InputActionOriClick,     TEXT("Send ori&ginal click"), NULL) \
   LNGVALUE(InputActionNothing,      TEXT("Nothing"), NULL) \
+  LNGVALUE(InputActionWindowDetails, TEXT("Window &details..."), NULL) \
+  LNGVALUE(InputActionDimmerFixed,  TEXT("Dim others (&fixed)"), NULL) \
+  LNGVALUE(InputActionDimmerFollow, TEXT("Dim others (follo&w)"), NULL) \
+  LNGVALUE(InputActionScreenshot,   TEXT("Save screens&hot..."), NULL) \
+  LNGVALUE(InputActionRevealExe,    TEXT("Show progra&m in Explorer"), NULL) \
+  LNGVALUE(InputActionAlign,        TEXT("Al&ign window"), NULL) \
+  LNGVALUE(InputActionClipboard,    TEXT("Clipboard"), NULL) \
+  LNGVALUE(ActAlign1,  TEXT("Bottom left"), NULL) \
+  LNGVALUE(ActAlign2,  TEXT("Bottom center"), NULL) \
+  LNGVALUE(ActAlign3,  TEXT("Bottom right"), NULL) \
+  LNGVALUE(ActAlign4,  TEXT("Middle left"), NULL) \
+  LNGVALUE(ActAlign5,  TEXT("Center"), NULL) \
+  LNGVALUE(ActAlign6,  TEXT("Middle right"), NULL) \
+  LNGVALUE(ActAlign7,  TEXT("Top left"), NULL) \
+  LNGVALUE(ActAlign8,  TEXT("Top center"), NULL) \
+  LNGVALUE(ActAlign9,  TEXT("Top right"), NULL) \
+  LNGVALUE(ActAlign10, TEXT("Center horizontally"), NULL) \
+  LNGVALUE(ActAlign11, TEXT("Center vertically"), NULL) \
+  LNGVALUE(ActClip1,   TEXT("Copy window screenshot"), NULL) \
+  LNGVALUE(ActClip2,   TEXT("Copy window title"), NULL) \
+  LNGVALUE(ActClip3,   TEXT("Copy program path"), NULL) \
+  LNGVALUE(ActClip4,   TEXT("Clear clipboard"), NULL) \
+  LNGVALUE(ActMsgBusy,      TEXT("A screenshot is already in progress."), NULL) \
+  LNGVALUE(ActMsgClipBusy,  TEXT("Clipboard is busy, try again."), NULL) \
+  LNGVALUE(ActMsgStale,     TEXT("Clipboard changed meanwhile, copy discarded."), NULL) \
+  LNGVALUE(ActMsgNoTarget,  TEXT("The target window no longer exists."), NULL) \
+  LNGVALUE(ActMsgCapFail,   TEXT("Could not capture the window."), NULL) \
+  LNGVALUE(ActMsgSaveFail,  TEXT("Could not save the file."), NULL) \
+  LNGVALUE(ActMsgNoWIC,     TEXT("PNG/JPEG encoding is not available on this system."), NULL) \
+  LNGVALUE(ActMsgNoMem,     TEXT("Not enough memory."), NULL) \
+  LNGVALUE(ActMsgFail,      TEXT("The operation failed."), NULL) \
+  LNGVALUE(ActMsgProtected, TEXT("Note: the window may block capture; the image can be blank."), NULL) \
   LNGVALUE(InputActionAltTab,       TEXT("Alt+Tab"), NULL) \
   LNGVALUE(InputActionVolume,       TEXT("Volume"), NULL) \
   LNGVALUE(InputActionMute,         TEXT("Mute &sounds"), NULL) \

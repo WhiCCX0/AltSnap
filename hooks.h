@@ -97,6 +97,8 @@
 #define WM_GETBESTLAYOUT  (WM_USER+18)
 //#define WM_GETZONESLEN    (WM_USER+19)
 #define WM_GETZONES       (WM_USER+20)
+#define WM_ACTIONFWD      (WM_USER+21) // hooks.dll -> AltSnap.exe: new action forward
+#define WM_ACTIONRES      (WM_USER+22) // worker/main thread -> AltSnap.exe: action result
 
 // List of possible actions
 // ACVALUE(AC_ENUM, IniString, Info)
@@ -155,7 +157,14 @@
     ACVALUE(AC_ZOOM,         Zoom,         MR) \
     ACVALUE(AC_ZOOM2,        Zoom2,        MR) \
     ACVALUE(AC_NPSTACKED,    NPStacked,    ZO) \
-    ACVALUE(AC_NPSTACKED2,   NPStacked2,   ZO)
+    ACVALUE(AC_NPSTACKED2,   NPStacked2,   ZO) \
+    ACVALUE(AC_WINDOWDETAILS, WindowDetails, 00) \
+    ACVALUE(AC_DIMMERFIXED,  DimmerFixed,  00) \
+    ACVALUE(AC_DIMMERFOLLOW, DimmerFollow, 00) \
+    ACVALUE(AC_SCREENSHOT,   Screenshot,   00) \
+    ACVALUE(AC_REVEALEXE,    RevealExe,    00) \
+    ACVALUE(AC_ALIGN,        Align,        MR) \
+    ACVALUE(AC_CLIPBOARD,    Clipboard,    00)
 
 #define ACVALUE(a, b, c) a,
 enum action { ACTION_MAP AC_MAXVALUE, AC_ORICLICK };
@@ -257,6 +266,49 @@ static char *ZidxToZonestrA(int laynum, int idx, char zname[AT_LEAST 32])
 }
 
 
+/* Timer helper for main thread entries (HOOK-5): only active with LOG_STUFF.
+ * The counter frequency is cached on first use, it never changes at runtime.
+ */
+#ifdef LOG_STUFF
+#define ACT_TIMER_BEGIN(t) LARGE_INTEGER t; QueryPerformanceCounter(&t)
+#define ACT_TIMER_END(t, name) do { \
+        static LARGE_INTEGER freq; \
+        LARGE_INTEGER t2; \
+        QueryPerformanceCounter(&t2); \
+        if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq); \
+        if (freq.QuadPart > 0) { \
+            unsigned long long us = (unsigned long long)(t2.QuadPart - t.QuadPart) * 1000000ULL / (unsigned long long)freq.QuadPart; \
+            if (us >= 10000ULL) LOG("SLOW %s %u us", (name), (unsigned)us); \
+        } \
+    } while (0)
+#else
+#define ACT_TIMER_BEGIN(t) do {} while (0)
+#define ACT_TIMER_END(t, name) do {} while (0)
+#endif
+
+/* Strict sub-action parsing for Align/Clipboard (ACT-4, T3).
+ * p points at the character returned by is_base_action(), i.e. '_', '=' or NUL.
+ * Only '_' followed by 1-3 ASCII digits and then NUL, '=', ' ', Tab or '"' is
+ * accepted; the value has to be in 1..127. Anything else gives 0.
+ */
+static pure BYTE ParseActionSub(const TCHAR *p)
+{
+    unsigned val = 0;
+    int ndigits = 0;
+    if (!p || *p != TEXT('_')) return 0;
+    p++;
+    while (TEXT('0') <= *p && *p <= TEXT('9')) {
+        val = val * 10 + (unsigned)(*p - TEXT('0'));
+        p++;
+        if (++ndigits > 3) return 0;
+    }
+    if (!ndigits) return 0;
+    if (*p != TEXT('\0') && *p != TEXT('=') && *p != TEXT(' ')
+    &&  *p != TEXT('\t') && *p != TEXT('"')) return 0;
+    if (val < 1 || val > 127) return 0;
+    return (BYTE)val;
+}
+
 static pure TCHAR* is_base_action(const TCHAR *a, const char *b)
 {
     while (*a && *a != '=' && *a != '_' && *a == *b) {
@@ -296,6 +348,12 @@ static pure action_t MapActionW(const TCHAR *txt)
         if ((params = is_base_action(txt, action_map[ac]))) {
             BYTE flagparam = 0;
             action.ac = ac;
+            if (ac == AC_ALIGN || ac == AC_CLIPBOARD) {
+                // Strict sub action parsing, no wp allowed (MSG-2).
+                action.fl = ParseActionSub(params);
+                action.wp = 0;
+                return action;
+            }
             if (*params == TEXT('_') && *++params) {
                 // We got 1 parameter.
                 TCHAR cc = *params++;

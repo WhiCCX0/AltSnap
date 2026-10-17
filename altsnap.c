@@ -31,11 +31,19 @@ static BYTE WinVer = 0;
 #define ENABLED() (!!G_HooksWinPorc)
 #define GetWindowRectL(hwnd, rect) GetWindowRectLL(hwnd, rect, SnapGap)
 static void UpdateSettings();
+static HMENU CreateAlignSubMenu(void);
+static HMENU CreateClipboardSubMenu(void);
 
 // Include stuff
 #include "languages.c"
 #include "tray.c"
 #include "config.c"
+#include "actmods.h"
+#include "procinfo.c"
+#include "clipbrd.c"
+#include "shot.c"
+#include "dimmer.c"
+#include "actexe.c"
 
 static HINSTANCE LoadHooksDLL(void)
 {
@@ -107,6 +115,7 @@ static int UnhookSystem(void)
 void ToggleState(void)
 {
     if (ENABLED()) {
+        DimmerCleanup();
         UnhookSystem();
     } else {
         // SendMessage(g_hwnd, WM_UPDATESETTINGS, 0, 0);
@@ -118,6 +127,7 @@ static void UpdateSettings(void)
 {
     //PostMessage(g_hwnd, WM_UPDATESETTINGS, 0, 0);
     if (ENABLED()) {
+        DimmerCleanup();
         UnhookSystem();
         HookSystem();
     }
@@ -168,17 +178,87 @@ void ShowSClickMenu(HWND hwnd, LPARAM param)
         { 0,              MF_SEPARATOR, NULL }, /* ------------------------ */
         { show_oriclick,  MF_STRING,          l10n->InputActionOriClick},
         { AC_NONE,        MF_STRING,          l10n->InputActionNothing},
+       /* New actions, indexes 20 to 26 */
+        { AC_WINDOWDETAILS, MF_STRING,        l10n->InputActionWindowDetails},
+        { AC_DIMMERFIXED, MF_STRING,          l10n->InputActionDimmerFixed},
+        { AC_DIMMERFOLLOW, MF_STRING,         l10n->InputActionDimmerFollow},
+        { AC_SCREENSHOT,  MF_STRING,          l10n->InputActionScreenshot},
+        { AC_REVEALEXE,   MF_STRING,          l10n->InputActionRevealExe},
+        { AC_ALIGN,       MF_STRING,          l10n->InputActionAlign},      /* submenu */
+        { AC_CLIPBOARD,   MF_STRING,          l10n->InputActionClipboard},  /* submenu */
     };
     #undef CHK
     #undef K
     unsigned i;
+    DWORD hiddennew = 0;
+    enum { MNLST_NEW_FIRST = 20 }; // first of the 7 new entries (indexes 20..26)
     for (i=0; i < ARR_SZ(mnlst); i++) {
-        if ( (ACMenuItems>>i)&1 && mnlst[i].action != 0xFF) // Put the action in the HIWORD of wParam
+        if (i >= MNLST_NEW_FIRST && mnlst[i].action != 0xFF && !((ACMenuItems>>i)&1)) {
+            // An explicit ACMenuItems mask hides one of the new entries (ACT-8).
+            hiddennew |= (DWORD)1 << (i - MNLST_NEW_FIRST);
+        }
+        if ( (ACMenuItems>>i)&1 && mnlst[i].action != 0xFF) { // Put the action in the HIWORD of wParam
+            if (mnlst[i].action == AC_ALIGN || mnlst[i].action == AC_CLIPBOARD) {
+                HMENU submenu = mnlst[i].action == AC_ALIGN
+                              ? CreateAlignSubMenu() : CreateClipboardSubMenu();
+                if (submenu) {
+                    AppendMenu(menu, MF_POPUP|mnlst[i].mf, (UINT_PTR)submenu, mnlst[i].str);
+                    continue;
+                }
+                // Could not build the submenu, do not add a dead parent entry.
+                continue;
+            }
             AppendMenu(menu, mnlst[i].mf, mnlst[i].action<<16, mnlst[i].str);
+        }
+    }
+    if (hiddennew) {
+        LOG("ACMenuItems mask hides new menu items: %lX (bits 20-26 = %lX)"
+            , (unsigned long)ACMenuItems, (unsigned long)hiddennew);
     }
     TrackPopupMenu(menu, GetSystemMetrics(SM_MENUDROPALIGNMENT), pt.x, pt.y, 0, hwnd, NULL);
     DestroyMenu(menu);
     PostMessage(hwnd, WM_CLOSE, 0, 0);
+}
+// Build the Align submenu, NULL when it cannot be created.
+// Item ids are ((UINT)ac | ((UINT)fl << 8)) << 16, see MSG-4.
+static HMENU CreateAlignSubMenu(void)
+{
+    // Numpad order: 7 8 9 / 4 5 6 / 1 2 3, then 10 and 11.
+    static const UCHAR subs[] = { 7, 8, 9, 4, 5, 6, 1, 2, 3 };
+    const TCHAR *const labels[] = {
+        l10n->ActAlign1, l10n->ActAlign2, l10n->ActAlign3,
+        l10n->ActAlign4, l10n->ActAlign5, l10n->ActAlign6,
+        l10n->ActAlign7, l10n->ActAlign8, l10n->ActAlign9,
+        l10n->ActAlign10, l10n->ActAlign11
+    };
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return NULL;
+    for (unsigned i = 0; i < ARR_SZ(subs); i++) {
+        if (i == 3 || i == 6)
+            AppendMenu(menu, MF_SEPARATOR, 0, NULL);
+        AppendMenu(menu, MF_STRING
+            , ((UINT)AC_ALIGN | ((UINT)subs[i] << 8)) << 16, labels[i]);
+    }
+    AppendMenu(menu, MF_SEPARATOR, 0, NULL);
+    AppendMenu(menu, MF_STRING
+        , ((UINT)AC_ALIGN | ((UINT)10 << 8)) << 16, labels[9]);
+    AppendMenu(menu, MF_STRING
+        , ((UINT)AC_ALIGN | ((UINT)11 << 8)) << 16, labels[10]);
+    return menu;
+}
+// Build the Clipboard submenu, NULL when it cannot be created.
+static HMENU CreateClipboardSubMenu(void)
+{
+    const TCHAR *const labels[] = {
+        l10n->ActClip1, l10n->ActClip2, l10n->ActClip3, l10n->ActClip4
+    };
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return NULL;
+    for (unsigned i = 0; i < ARR_SZ(labels); i++) {
+        AppendMenu(menu, MF_STRING
+            , ((UINT)AC_CLIPBOARD | ((UINT)(i+1) << 8)) << 16, labels[i]);
+    }
+    return menu;
 }
 // To get the caret position in screen coordinate.
 // We first try to get the carret rect
@@ -367,6 +447,7 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         showerror = 0;
         UnhookSystem();
     } else if (msg == WM_DESTROY) {
+        DimmerCleanup();
         UnhookSystem();
         RemoveTray();
         PostQuitMessage(0);
@@ -385,6 +466,12 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
                 G_HooksWinPorc(hwnd, WM_SETLAYOUTNUM, LayoutNumber, 0);
             }
         }
+    } else if (msg == WM_ACTIONFWD) {
+        action_t a;
+        UNPACK_ACTION(a, lParam);
+        ActionFwdDispatch((HWND)wParam, a);
+    } else if (msg == WM_ACTIONRES) {
+        ActionResult(wParam);
     } else if (msg == WM_HOTKEY || msg == WM_STACKLIST /*|| msg == WM_POWERBROADCAST*/) {
         if (G_HooksWinPorc)
             return G_HooksWinPorc(hwnd, msg, wParam, lParam);
@@ -558,6 +645,9 @@ int WINAPI tWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, TCHAR *params, int
 
     InitTray();
     UpdateTray();
+
+    // Clipboard resources, before any worker thread is created
+    ClipboardInit();
 
     // Hook system
     HookSystem();
