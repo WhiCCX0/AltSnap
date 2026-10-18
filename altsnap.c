@@ -226,9 +226,9 @@ static HMENU CreateAlignSubMenu(void)
     // Numpad order: 7 8 9 / 4 5 6 / 1 2 3, then 10 and 11.
     static const UCHAR subs[] = { 7, 8, 9, 4, 5, 6, 1, 2, 3 };
     const TCHAR *const labels[] = {
-        l10n->ActAlign1, l10n->ActAlign2, l10n->ActAlign3,
-        l10n->ActAlign4, l10n->ActAlign5, l10n->ActAlign6,
         l10n->ActAlign7, l10n->ActAlign8, l10n->ActAlign9,
+        l10n->ActAlign4, l10n->ActAlign5, l10n->ActAlign6,
+        l10n->ActAlign1, l10n->ActAlign2, l10n->ActAlign3,
         l10n->ActAlign10, l10n->ActAlign11
     };
     HMENU menu = CreatePopupMenu();
