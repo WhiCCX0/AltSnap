@@ -180,6 +180,41 @@ struct langinfoitem {
   LNGVALUE(ActMsgNoMem,     TEXT("Not enough memory."), NULL) \
   LNGVALUE(ActMsgFail,      TEXT("The operation failed."), NULL) \
   LNGVALUE(ActMsgProtected, TEXT("Note: the window may block capture; the image can be blank."), NULL) \
+  /* Path and text notices (WP-PROC) */ \
+  LNGVALUE(ActMsgNoPath,    TEXT("Could not get the path of the program."), NULL) \
+  LNGVALUE(ActMsgNoText,    TEXT("There is no text to copy."), NULL) \
+  /* Window details dialog (WP-PROC) */ \
+  LNGVALUE(InfoTitle,       TEXT("Window details"), NULL) \
+  LNGVALUE(InfoClose,       TEXT("Close"), NULL) \
+  LNGVALUE(InfoWindow,      TEXT("Window handle"), NULL) \
+  LNGVALUE(InfoWindowTitle, TEXT("Title"), NULL) \
+  LNGVALUE(InfoClassName,   TEXT("Class"), NULL) \
+  LNGVALUE(InfoPositionX,   TEXT("Position X"), NULL) \
+  LNGVALUE(InfoPositionY,   TEXT("Position Y"), NULL) \
+  LNGVALUE(InfoWidth,       TEXT("Width"), NULL) \
+  LNGVALUE(InfoHeight,      TEXT("Height"), NULL) \
+  LNGVALUE(InfoState,       TEXT("State"), NULL) \
+  LNGVALUE(InfoStateNormal, TEXT("Normal"), NULL) \
+  LNGVALUE(InfoStateMaximized, TEXT("Maximized"), NULL) \
+  LNGVALUE(InfoStateMinimized, TEXT("Minimized"), NULL) \
+  LNGVALUE(InfoVisible,     TEXT("Visible"), NULL) \
+  LNGVALUE(InfoYes,         TEXT("Yes"), NULL) \
+  LNGVALUE(InfoNo,          TEXT("No"), NULL) \
+  LNGVALUE(InfoUnknown,     TEXT("Unknown"), NULL) \
+  LNGVALUE(InfoCloaked,     TEXT("DWM cloaked"), NULL) \
+  LNGVALUE(InfoStyle,       TEXT("Style"), NULL) \
+  LNGVALUE(InfoExStyle,     TEXT("Extended style"), NULL) \
+  LNGVALUE(InfoPid,         TEXT("Process ID"), NULL) \
+  LNGVALUE(InfoTid,         TEXT("Thread ID"), NULL) \
+  LNGVALUE(InfoProcessName, TEXT("Process"), NULL) \
+  LNGVALUE(InfoRealPid,     TEXT("Hosted process ID"), NULL) \
+  LNGVALUE(InfoPath,        TEXT("Executable"), NULL) \
+  LNGVALUE(InfoStartTime,   TEXT("Started"), NULL) \
+  LNGVALUE(InfoCpuTime,     TEXT("CPU time"), NULL) \
+  LNGVALUE(InfoWorkingSet,  TEXT("Working set"), NULL) \
+  LNGVALUE(InfoPrivateMem,  TEXT("Private memory"), NULL) \
+  LNGVALUE(InfoUnavailable, TEXT("Unavailable (access denied or query failed)"), NULL) \
+  LNGVALUE(InfoEmpty,       TEXT("(empty)"), NULL) \
   LNGVALUE(InputActionAltTab,       TEXT("Alt+Tab"), NULL) \
   LNGVALUE(InputActionVolume,       TEXT("Volume"), NULL) \
   LNGVALUE(InputActionMute,         TEXT("Mute &sounds"), NULL) \
