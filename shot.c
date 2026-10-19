@@ -13,10 +13,12 @@
  * Results travel back as WM_ACTIONRES codes only, no pointer and no handle is
  * ever put in a message (MSG-3, SHOT-13).
  *
- * The worker captures the window into a top-down 24bpp BGR DIB section, then
- * either packs a CF_DIB and commits it from this very thread (SHOT-12), or
- * opens the save dialog and encodes PNG/JPEG (WIC v1) or BMP (SHOT-9..11)
- * into a temporary file that is moved over the target file (SHOT-10).
+ * The worker captures the window into a top-down 32bpp DIB section (E11: a
+ * 24bpp target is not drawn by PW_RENDERFULLCONTENT), compacts it in place to
+ * 24bpp BGR, then either packs a CF_DIB and commits it from this very thread
+ * (SHOT-12), or opens the save dialog and encodes PNG/JPEG (WIC v1) or BMP
+ * (SHOT-9..11) into a temporary file that is moved over the target file
+ * (SHOT-10).
  */
 
 #include <commdlg.h>  /* OPENFILENAMEW: types only, comdlg32 is loaded at runtime */
@@ -45,10 +47,11 @@
 #define SHOT_PROBE_MS 2000
 
 /* Sentinel pattern that detects a PrintWindow() which reports success but
- * draws nothing (E11 / decision D-30). The bytes are the B, G, R of the
- * top-down DIB, so the pattern is 5A A5 3C over and over; that combination is
- * not a plausible image colour, and a real black image writes zeros, which
- * does not match it either.
+ * draws nothing (E11 / decision D-30). The capture buffer is a 32bpp top-down
+ * DIB, so a pixel is 4 bytes and only its B, G, R are compared: the pattern is
+ * 5A A5 3C in every pixel, and the fourth byte is filled with 00 but never
+ * looked at. That combination is not a plausible image colour, and a real
+ * black image writes zeros into B, G and R, which does not match it either.
  */
 #define SHOT_SENT_B 0x5A
 #define SHOT_SENT_G 0xA5
@@ -110,52 +113,80 @@ static void ShotReport(UINT kind, UINT code, UINT flags)
     PostMessage(g_hwnd, WM_ACTIONRES, ACRES(kind, code, flags), 0);
 }
 
-/* Row length of a 24bpp bitmap, 4 byte aligned (SHOT-8/SHOT-12) */
+/* Row length of a 24bpp bitmap, 4 byte aligned (SHOT-8/SHOT-12). This is the
+ * layout of the capture buffer after it has been compacted from 32bpp, and of
+ * the packed CF_DIB rows.
+ */
 static unsigned int ShotStride(int width)
 {
     return (unsigned int)(((unsigned long long)width * 3 + 3) & ~3ULL);
 }
 
-/* Fill the whole capture buffer, row padding included, with the sentinel
- * pattern. The padding bytes are never read: ShotPackDIB copies only cropW*3
- * bytes per row and zeroes the destination padding itself, and WritePixels is
- * called with cbStride = cbBufferSize = cropW*3, so filling them is harmless.
+/* Fill the whole 32bpp capture buffer, row padding included, with the sentinel
+ * pattern. One pixel is 4 bytes; the fourth byte is written but never compared
+ * (see ShotBufferChanged). The padding bytes are never read: after the
+ * compaction ShotPackDIB copies only cropW*3 bytes per row and zeroes the
+ * destination padding itself, and WritePixels is called with
+ * cbStride = cbBufferSize = cropW*3, so filling them is harmless.
  */
 static void ShotFillSentinel(BYTE *bits, int stride, int height)
 {
     int y, x;
     for (y = 0; y < height; y++) {
         BYTE *row = bits + (size_t)y * (size_t)stride;
-        for (x = 0; x + 3 <= stride; x += 3) {
+        for (x = 0; x + 4 <= stride; x += 4) {
             row[x]     = SHOT_SENT_B;
             row[x + 1] = SHOT_SENT_G;
             row[x + 2] = SHOT_SENT_R;
+            row[x + 3] = 0;
         }
-        if (x < stride) row[x] = SHOT_SENT_B;
-        if (x + 1 < stride) row[x + 1] = SHOT_SENT_G;
     }
 }
 
-/* 1 when any of the width*3 pixel bytes of any row is no longer the sentinel,
- * i.e. the previous PrintWindow() really drew something. Stops at the first
- * difference, so a drawn image costs a few bytes, not a full scan. Pixels are
- * compared as whole BGR triplets (width*3 is always a multiple of 3), and the
- * row padding is never looked at.
+/* 1 when any of the width 32bpp pixels of any row no longer has the sentinel in
+ * its B, G, R bytes, i.e. the previous PrintWindow() really drew something.
+ * Stops at the first difference, so a drawn image costs a few bytes, not a full
+ * scan. The fourth byte of a pixel is not part of the test, so whatever
+ * PrintWindow() leaves in it cannot fake a difference.
  */
 static int ShotBufferChanged(const BYTE *bits, int stride, int width, int height)
 {
-    const size_t rowbytes = (size_t)width * 3;
+    const size_t rowbytes = (size_t)width * 4;
     int y;
     size_t x;
     for (y = 0; y < height; y++) {
         const BYTE *row = bits + (size_t)y * (size_t)stride;
-        for (x = 0; x < rowbytes; x += 3) {
+        for (x = 0; x < rowbytes; x += 4) {
             if (row[x] != SHOT_SENT_B || row[x + 1] != SHOT_SENT_G
             ||  row[x + 2] != SHOT_SENT_R)
                 return 1;
         }
     }
     return 0;
+}
+
+/* Squeeze the 32bpp capture buffer down to 24bpp in place: every pixel keeps
+ * its B, G and R and drops the fourth byte. The padding at the end of each
+ * 24bpp row keeps whatever the compaction left there and is never read.
+ * The in-place forward copy is safe because dst <= src for every byte copied
+ * (3 <= 4 within a pixel, and ShotStride(width) <= width*4 between pixels), so
+ * a byte still to be read is never overwritten first.
+ */
+static void ShotCompact24(BYTE *bits, int width, int height)
+{
+    const size_t dststride = (size_t)ShotStride(width);
+    const size_t srcstride = (size_t)width * 4;
+    int y;
+    for (y = 0; y < height; y++) {
+        BYTE *dst = bits + (size_t)y * dststride;
+        const BYTE *src = bits + (size_t)y * srcstride;
+        int x;
+        for (x = 0; x < width; x++, src += 4, dst += 3) {
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+        }
+    }
 }
 
 /* Compare two GUIDs without memcmp (which would become a new import) */
@@ -265,8 +296,9 @@ static void ShotCaptureFree(shot_capture_t *cap)
     cap->bits = NULL;
 }
 
-/* Capture the whole window rect into a top-down 24bpp BGR DIB section and
- * compute the visible crop rect (SHOT-5..SHOT-8). Returns an ACR_* code.
+/* Capture the whole window rect into a top-down 32bpp DIB section, compact it
+ * in place to 24bpp BGR, and compute the visible crop rect (SHOT-5..SHOT-8).
+ * Returns an ACR_* code.
  */
 static int ShotCapture(HWND hwnd, shot_capture_t *cap)
 {
@@ -318,7 +350,8 @@ static int ShotCapture(HWND hwnd, shot_capture_t *cap)
         LOG("Shot: bad window rect %dx%d", cap->width, cap->height);
         return ACR_CAPFAIL;
     }
-    stride = ShotStride(cap->width);
+    /* The PrintWindow() target has to be 32bpp, see the E11 note below */
+    stride = (unsigned int)cap->width * 4;
     total = (unsigned long long)stride * (unsigned long long)cap->height;
     if (total > 0xFFFFFFFFULL) {
         LOG("Shot: window too big (%dx%d)", cap->width, cap->height);
@@ -330,7 +363,7 @@ static int ShotCapture(HWND hwnd, shot_capture_t *cap)
     bi.bmiHeader.biWidth = cap->width;
     bi.bmiHeader.biHeight = -cap->height; /* top down (SHOT-8) */
     bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 24;
+    bi.bmiHeader.biBitCount = 32; /* E11: a 24bpp target is not drawn */
     bi.bmiHeader.biCompression = BI_RGB;
     bi.bmiHeader.biSizeImage = (DWORD)total;
 
@@ -360,13 +393,18 @@ static int ShotCapture(HWND hwnd, shot_capture_t *cap)
     /* SHOT-6: full content first, plain flags only as a second attempt, and
      * no BitBlt fallback. TRUE does not promise a complete image.
      *
-     * E11 / D-30: on some systems (measured here: Windows 11 26200 with an AMD
-     * adapter in a console session) PrintWindow(hwnd, hdc, 2) returns TRUE and
-     * draws not a single byte, while flags=0 draws the window correctly. A
-     * TRUE return alone therefore cannot tell "drew the image" from "did
-     * nothing", so the buffer is pre-filled with a sentinel pattern and the
-     * pixels are scanned afterwards. A genuinely black image writes zeros and
-     * does not match the sentinel, so it is not mistaken for "nothing drawn".
+     * E11 / D-30, real cause (measured on this machine: Windows 11 26200, AMD
+     * adapter, console session): PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)
+     * returns TRUE but writes not a single byte when hdc holds a *24bpp* DIB
+     * section, while the very same window is drawn completely into a 32bpp DIB
+     * section (top-down or bottom-up) and into a DDB. flags=0 draws the classic
+     * theme frame without the GPU content. The 24bpp target was the bug, not
+     * flags=2, which is why this buffer is 32bpp and is compacted to 24bpp
+     * right after a successful capture (ShotCompact24). A TRUE return alone
+     * still cannot tell "drew the image" from "did nothing", so the buffer is
+     * pre-filled with a sentinel pattern and the pixels are scanned afterwards.
+     * A genuinely black image writes zeros and does not match the sentinel, so
+     * it is not mistaken for "nothing drawn".
      * If neither flag touches the buffer, that is proof that nothing was
      * drawn (not "incomplete content"), so the task fails cleanly instead of
      * handing the sentinel pattern to the user (owner decision, r3b).
@@ -406,7 +444,10 @@ static int ShotCapture(HWND hwnd, shot_capture_t *cap)
         return ACR_CAPFAIL;
     }
 
-    cap->stride = (int)stride;
+    /* The image is in the 32bpp buffer now: compact it in place to the 24bpp
+     * layout that the crop, ShotPackDIB and WritePixels expect. */
+    ShotCompact24(cap->bits, cap->width, cap->height);
+    cap->stride = (int)ShotStride(cap->width);
 
     /* SHOT-8: visible rect = DWM extended frame bounds intersected with the
      * window rect. No DWM bounds at all (DWM off, old system) means no crop;
