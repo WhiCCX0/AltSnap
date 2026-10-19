@@ -157,6 +157,30 @@ static DWORD WINAPI ClipboardThreadProc(LPVOID param)
     return 0;
 }
 
+/* Take the request sequence of a clipboard request whose commit runs in a
+ * worker that is not a clipboard commit thread, i.e. the screenshot worker of
+ * Clipboard_1 (SHOT-3/NIT1). Only the main thread calls this. The clipboard
+ * sequence number is read right after the increment and copied into the task,
+ * so that a late screenshot does not overwrite content copied after the
+ * request (CLIP-7/RES-4). Clipboard_1 takes no in-flight slot: the limit of
+ * two only covers Clipboard_2/3/4 commit threads, and Clipboard_1 is already
+ * serialised by the screenshot single flight flag (SHOT-2/RES-4).
+ */
+static LONG ClipboardTakeSeq(DWORD *cbseq)
+{
+    LONG seq = InterlockedIncrement(&g_clip_seq);
+    *cbseq = GetClipboardSequenceNumber();
+    return seq;
+}
+
+/* Put that sequence back when the dispatch of the request failed, so that the
+ * failed request leaves no trace (RES-4/SHOT-4).
+ */
+static void ClipboardDropSeq(void)
+{
+    InterlockedDecrement(&g_clip_seq);
+}
+
 /* Copy text to the clipboard through a new commit thread (CLIP-1/CLIP-2).
  * Runs on the main thread: it only copies the text and creates the thread.
  * `text` is a private copy, it is released by the thread or here.
