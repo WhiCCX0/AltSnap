@@ -5095,6 +5095,8 @@ static int init_movement_and_actions(POINT pt, HWND hwnd, action_t action, int b
     if (
        blacklisted(state.hwnd, &BlkLst.Processes)
     || !lstrcmp(state.classname, TEXT(APP_NAMEA)TEXT("-Pin"))
+    // The dimmer overlay is click through, but never act on it (WP-DIM, DIM-6)
+    || !lstrcmp(state.classname, TEXT(APP_NAMEA)TEXT("-Dim"))
     ||(blacklisted(state.hwnd, &BlkLst.Windows)
         && !state.hittest && (button < BT_WHEELD /* || BT_HWHEELU > button*/)
       )// does not apply in titlebar, nor for the wheel action...
